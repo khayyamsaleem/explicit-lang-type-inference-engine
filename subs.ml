@@ -15,7 +15,7 @@ let lookup (ht:subst) (id:string) = Hashtbl.find_opt ht id
 
 let string_of_subs (ht:subst) =
   if Hashtbl.length ht == 0 then "{}" else
-  let orig = (fun h -> Hashtbl.fold (fun k v acc -> k ^ ": " ^ (string_of_texpr v) ^ ", " ^acc) h "") ht
+  let orig = (fun h -> Hashtbl.fold (fun k v acc -> k ^ ":=" ^ (string_of_texpr v) ^ ", " ^acc) h "") ht
   in "{"^(String.sub orig 0 (String.length orig - 2))^"}"
 
 let domain = fun h -> Hashtbl.fold (fun k v acc -> k :: acc) h []
