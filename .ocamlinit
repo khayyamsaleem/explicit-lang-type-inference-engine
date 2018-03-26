@@ -5,7 +5,6 @@
 #load_rec "infer.cmo";;
 
 open Infer;;
-
 (* Added by OPAM. *)
 
 let () =
