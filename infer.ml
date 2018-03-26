@@ -86,15 +86,14 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
       | Proc(arg, type_variable, body) ->
         (match (get_type body num type_environment) with
         | OK(num, (s, body, t)) ->
-          remove s arg;
           let type_variable = (match lookup s arg with
                                 |Some t -> t
                                 |None -> type_variable)
-          in OK(num, (s, Proc(arg, type_variable, body), FuncType(type_variable, t)))
+          in remove s arg; OK(num, (s, Proc(arg, type_variable, body), FuncType(type_variable, t)))
         | Error err -> Error err)
       | ProcUntyped(arg, body) ->
             (*just strip away type spec and reduce to proc case*)
-            get_type (Proc(arg, VarType((string_of_int (num+1))), body)) num type_environment
+            get_type (Proc(arg, VarType((string_of_int (num+1))), body)) (num+1) type_environment
       | IsZero(a) ->
         (match (get_type a num type_environment) with
          | OK(num, (s_low, a, ty)) ->
@@ -116,19 +115,39 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
       | App(f, arg) ->
             (match get_type f num type_environment with
              |OK(num, (s, f, ty_f)) ->
-               let temp_tenv = join [s; type_environment] in
-               (match get_type arg num temp_tenv with
+               let type_environment = join [s; type_environment] in
+               (match get_type arg num type_environment with
                 | OK(num, (s, arg, ty_arg)) ->
-                      let temp_tenv = join [s;temp_tenv] in
+                      let type_environment = join [s;type_environment] in
                       let out_ty = (match ty_f with
                                     | FuncType (_, out_ty) -> out_ty
                                     | _ -> VarType((string_of_int (num+1))))
-                      in (match mgu [(ty_f, FuncType(ty_arg, out_ty))] with
-                          | UOk(s) -> apply_to_env s temp_tenv;
-                                     OK(num+1, (temp_tenv, App(f, arg), apply_to_texpr s out_ty))
+                      in (match (mgu [(ty_f, FuncType(ty_arg, out_ty))]) with
+                          | UOk(s) -> apply_to_env s type_environment;
+                                     OK((num+1), (type_environment, App(f, arg), apply_to_texpr s out_ty))
                           | UError(ty1, ty2) ->
-                              Error((string_of_texpr ty1) ^ " not unifiable with " ^ (string_of_texpr ty2)))
+                              Error((string_of_texpr ty1)^" not unifiable with " ^ (string_of_texpr ty2)))
                 | err -> err)
+             | err -> err)
+      | ITE(condition, then_case, else_case) ->
+            (match get_type condition num type_environment with
+             | OK(num, (s_cond, condition, ty_cond)) ->
+                let temp_tenv = join [s_cond; type_environment]
+                in (match get_type then_case num temp_tenv with
+                    | OK (num, (s1, then_case, ty_then)) ->
+                      let temp_tenv = join [s1; temp_tenv]
+                      in (match get_type else_case num temp_tenv with
+                          | OK (num, (s2, else_case, ty_else)) ->
+                            let temp_tenv = join [temp_tenv; s2]
+                            in (match mgu [(ty_cond, BoolType); (ty_then, ty_else)] with
+                                | UOk(s) -> apply_to_env s temp_tenv;
+                                            OK(num, (temp_tenv, ITE(condition, then_case, else_case),
+                                                                (apply_to_texpr temp_tenv ty_then)))
+                                | UError(ty1,ty2) ->
+                                        Error((string_of_texpr ty1) ^
+                                                " not unifiable with " ^ (string_of_texpr ty2)))
+                          | err -> err)
+                    | err -> err)
              | err -> err)
       | _ -> failwith "infer': undefined"
   in get_type e 0 (create ())
