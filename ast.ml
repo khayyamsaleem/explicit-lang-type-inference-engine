@@ -61,7 +61,7 @@ and string_of_texpr = function
   | IntType -> "int"
   | BoolType -> "bool"
   | UnitType -> "unit"
-  | VarType id -> "VarType"^id
+  | VarType id -> "_V"^id
   | FuncType(t1,t2) -> "("^string_of_texpr t1^"->"^string_of_texpr t2^")"
   | RefType(t) -> "Ref("^string_of_texpr t^")"
 

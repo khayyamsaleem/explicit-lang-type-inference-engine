@@ -1,3 +1,4 @@
+(* Khayyam Saleem *)
 open Unification
 open Subs
 open Ast
@@ -125,6 +126,48 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
                 )
            | err -> err
           )
+      | BeginEnd lst_of_expressions ->
+          (match lst_of_expressions with
+           (*empty seq -> void type*)
+           | [] -> get_type Unit num type_environment
+           (*last expression represents type of body of begin-end*)
+           | a::[] -> get_type a num type_environment
+           (*type first expression to see if there's nothing illegal, then proceed with rest of list*)
+           | a::rest ->
+                (match get_type a num type_environment with
+                 | OK(num, (s_a, _, ty_a)) ->
+                      (match get_type (BeginEnd(rest)) num (join [s_a; type_environment]) with
+                       | OK(num, (s_rest, BeginEnd(rest), ty_rest)) ->
+                              OK(num, (join [s_a; s_rest], BeginEnd(lst_of_expressions), ty_rest))
+                       | err -> err
+                      )
+                 | err -> err
+                )
+          )
+      | NewRef(v) ->
+          (match get_type v num type_environment with
+           | OK(num, (s, v, ty_v)) -> OK(num, (s, expression, RefType(ty_v)))
+           | err -> err
+          )
+      | DeRef(r) ->
+          (match get_type r num type_environment with
+            | OK(num, (s, r, ty_r)) ->
+                (match ty_r with
+                 | RefType ty_v -> OK(num, (s, r, ty_v))
+                 | _ -> Error("expected RefType " ^ string_of_expr r ^", received "^string_of_texpr ty_r)
+                )
+            | err -> err
+          )
+      | SetRef(r, v) ->
+          (match get_type v num type_environment with
+           | OK(num, (s_v, v, ty_v)) ->
+              (match get_type r num type_environment with
+               | OK(num, (s_r, r, ty_r)) ->
+                  (match ty_r with
+                  | RefType(ty_v) -> OK(num, (s_r, Unit, ty_v))
+                  | _ -> Error("expected RefType " ^ string_of_expr r ^", received "^string_of_texpr ty_r))
+               | err -> err)
+           | err -> err)
       | _ -> failwith "infer': undefined"
   in get_type e 0 (create ())
 
@@ -135,9 +178,15 @@ getTypingContext (e:expr) (n:int): subst =
   |OK (_, (s,_,_)) -> s
   |Error err -> failwith err
 
-
+(*
 let string_of_typing_judgement = function
   | ht,e,t -> string_of_subs ht ^" |- "^ string_of_expr e ^ " : " ^ string_of_texpr t
+*)
+
+let string_of_typing_judgement (s,e,t) =
+  "\027[33m "^string_of_subs s^"\027[32m |- \027[36m"^string_of_expr e
+  ^" : \027[35m "^string_of_texpr t
+
 let infer_type (AProg e) =
   match infer' e 0 with
   | OK (_, tj) -> string_of_typing_judgement tj
@@ -156,3 +205,5 @@ let inf (e:string) : string =
 
 let test (n:int) : string =
   Examples.expr n |> parse |> infer_type
+
+let test () = for i = 1 to 24 do print_string @@ "\027[40m\027[39m"^string_of_int i ^") " ^ inf @@ Examples.expr i; print_string "\n"; done;;
