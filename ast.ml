@@ -52,7 +52,7 @@ let rec string_of_expr e =
   | IsZero(e) -> "Zero?("^string_of_expr e ^")"
   | ITE(e1,e2,e3) -> "IfThenElse("^string_of_expr e1^"," ^ string_of_expr e2^"," ^ string_of_expr e3  ^")"
   | Letrec(tRes,x,param,tPara, def,body) -> "Letrec("^string_of_texpr
-  tRes^" "^x^","^param^":"^string_of_texpr tRes ^","^ string_of_expr def ^","^ string_of_expr body ^")"
+  tRes^" "^x^","^param^":"^string_of_texpr tPara ^","^ string_of_expr def ^","^ string_of_expr body ^")"
   | LetrecUntyped(x,param,def,body) -> "Letrec("^x^","^param^","^ string_of_expr def ^","^ string_of_expr body ^")"
   | Set(x,rhs) -> "Set("^x^","^string_of_expr rhs^")"
   | BeginEnd(es) -> "BeginEnd(" ^ List.fold_left (fun x y -> x^","^y)
