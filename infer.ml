@@ -27,56 +27,14 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
                  | Some type_expression -> extend s x type_expression; (s, expression, type_expression)
                  |_ -> failwith("shouldn't happen")
                )
-      | Add (a, b) ->
+      | Sub (a,b) | Div (a,b) | Mul (a,b) | Add (a, b) ->
         (match (get_type a num type_environment) with
          | OK (num, (s1, a, ty1)) ->
            (match (get_type b num type_environment) with
             | OK(num, (s2, b, ty2)) ->
                 let s_low = join [s1; s2] in
                 (match mgu [(ty1, Ast.IntType);(ty2, Ast.IntType)] with
-                 | UOk(s) -> apply_to_env s s_low; OK(n, (s_low, Add(a,b), Ast.IntType))
-                 | UError(ty1, ty2) ->
-                      Error((string_of_texpr ty1) ^ " not unifiable with " ^ (string_of_texpr ty2))
-                )
-            | err -> err
-           )
-         | err -> err)
-      | Sub (a, b) ->
-        (match (get_type a num type_environment) with
-         | OK (num, (s1, a, ty1)) ->
-           (match (get_type b num type_environment) with
-            | OK(num, (s2, b, ty2)) ->
-                let s_low = join [s1; s2] in
-                (match mgu [(ty1, Ast.IntType);(ty2, Ast.IntType)] with
-                 | UOk(s) -> apply_to_env s s_low; OK(n, (s_low, Sub(a,b), Ast.IntType))
-                 | UError(ty1, ty2) ->
-                      Error((string_of_texpr ty1) ^ " not unifiable with " ^ (string_of_texpr ty2))
-                )
-            | err -> err
-           )
-         | err -> err)
-      | Mul (a, b) ->
-        (match (get_type a num type_environment) with
-         | OK (num, (s1, a, ty1)) ->
-           (match (get_type b num type_environment) with
-            | OK(num, (s2, b, ty2)) ->
-                let s_low = join [s1; s2] in
-                (match mgu [(ty1, Ast.IntType);(ty2, Ast.IntType)] with
-                 | UOk(s) -> apply_to_env s s_low; OK(n, (s_low, Mul(a,b), Ast.IntType))
-                 | UError(ty1, ty2) ->
-                      Error((string_of_texpr ty1) ^ " not unifiable with " ^ (string_of_texpr ty2))
-                )
-            | err -> err
-           )
-         | err -> err)
-      | Div (a, b) ->
-        (match (get_type a num type_environment) with
-         | OK (num, (s1, a, ty1)) ->
-           (match (get_type b num type_environment) with
-            | OK(num, (s2, b, ty2)) ->
-                let s_low = join [s1; s2] in
-                (match mgu [(ty1, Ast.IntType);(ty2, Ast.IntType)] with
-                 | UOk(s) -> apply_to_env s s_low; OK(n, (s_low, Div(a,b), Ast.IntType))
+                 | UOk(s) -> apply_to_env s s_low; OK(n, (s_low, expression, Ast.IntType))
                  | UError(ty1, ty2) ->
                       Error((string_of_texpr ty1) ^ " not unifiable with " ^ (string_of_texpr ty2))
                 )
@@ -149,6 +107,24 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
                           | err -> err)
                     | err -> err)
              | err -> err)
+      | LetrecUntyped(fname, arg, func_body, call_exp) ->
+          let num = (num+2) in
+          let ty_arg = VarType(string_of_int (num-1)) and
+              ty_out = VarType(string_of_int num) and
+              type_environment_local = type_environment in
+          extend type_environment_local fname (FuncType(ty_arg, ty_out));
+          (match get_type (Proc(arg, ty_arg, func_body)) num type_environment_local with
+           | OK(num, (s_func, func_body, ty_func)) ->
+                let tye_body = type_environment in
+                extend type_environment_local fname ty_func;
+                (match get_type call_exp num tye_body with
+                 |OK(num, (s, call_exp, ty_call)) ->
+                    remove s fname;
+                    OK(num, (s, expression, ty_call))
+                 | err -> err
+                )
+           | err -> err
+          )
       | _ -> failwith "infer': undefined"
   in get_type e 0 (create ())
 
@@ -162,7 +138,6 @@ getTypingContext (e:expr) (n:int): subst =
 
 let string_of_typing_judgement = function
   | ht,e,t -> string_of_subs ht ^" |- "^ string_of_expr e ^ " : " ^ string_of_texpr t
-
 let infer_type (AProg e) =
   match infer' e 0 with
   | OK (_, tj) -> string_of_typing_judgement tj
