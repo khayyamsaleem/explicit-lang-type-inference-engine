@@ -25,7 +25,7 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
             OK (num,
                  let s = create () in
                  match lookup type_environment x with
-                 | Some type_expression -> extend s x type_expression; (s, expression, type_expression)
+                 | Some type_expression -> extend s x type_expression; (s, Var(x), type_expression)
                  |_ -> failwith("shouldn't happen")
                )
       | Sub (a,b) | Div (a,b) | Mul (a,b) | Add (a, b) ->
@@ -61,14 +61,14 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
             | UError (ty1, ty2) ->
                 Error((string_of_texpr ty1) ^ " not unifiable with " ^ (string_of_texpr ty2)))
          | err -> err)
-      | Let(id, expression, body) ->
-            (match (get_type expression num type_environment) with
-             | OK(num, (s1, expression, ty_expression)) ->
+      | Let(id, e, body) ->
+            (match (get_type e num type_environment) with
+             | OK(num, (s1, e, ty_expression)) ->
                let temp_tenv = type_environment in
                extend temp_tenv id ty_expression;
                (match get_type body num temp_tenv with
                 | OK(num, (s2, body, ty_body)) ->
-                  remove s1 id; remove s2 id; OK(num, (join [s1;s2], Let(id, expression, body), ty_body))
+                  remove s1 id; remove s2 id; OK(num, (join [s1;s2], Let(id, e, body), ty_body))
                 | err -> err)
              | err -> err)
       | App(f, arg) ->
@@ -121,24 +121,28 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
                 (match get_type call_exp num tye_body with
                  |OK(num, (s, call_exp, ty_call)) ->
                     remove s fname;
-                    OK(num, (s, expression, ty_call))
+                    OK(num, (s, LetrecUntyped(fname, arg, func_body, call_exp), ty_call))
                  | err -> err
                 )
            | err -> err
           )
-      | BeginEnd lst_of_expressions ->
+      | BeginEnd(lst_of_expressions) ->
           (match lst_of_expressions with
            (*empty seq -> void type*)
-           | [] -> get_type Unit num type_environment
+           | [] -> (get_type Unit num type_environment)
            (*last expression represents type of body of begin-end*)
-           | a::[] -> get_type a num type_environment
+           | a::[] ->
+                (match (get_type a num type_environment) with
+                 | OK(num, (s_a, e_one, ty_one)) -> OK(num, (s_a, (BeginEnd([e_one])), ty_one))
+                 | err -> err
+                )
            (*type first expression to see if there's nothing illegal, then proceed with rest of list*)
            | a::rest ->
                 (match get_type a num type_environment with
                  | OK(num, (s_a, _, ty_a)) ->
                       (match get_type (BeginEnd(rest)) num (join [s_a; type_environment]) with
-                       | OK(num, (s_rest, BeginEnd(rest), ty_rest)) ->
-                              OK(num, (join [s_a; s_rest], BeginEnd(lst_of_expressions), ty_rest))
+                       | OK(num, (s_rest, (BeginEnd(rest)), ty_rest)) ->
+                              OK(num, (join [s_a; s_rest], BeginEnd(a::rest), ty_rest))
                        | err -> err
                       )
                  | err -> err
@@ -146,7 +150,7 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
           )
       | NewRef(v) ->
           (match get_type v num type_environment with
-           | OK(num, (s, v, ty_v)) -> OK(num, (s, expression, RefType(ty_v)))
+           | OK(num, (s, v, ty_v)) -> OK(num, (s, NewRef(v), RefType(ty_v)))
            | err -> err
           )
       | DeRef(r) ->
