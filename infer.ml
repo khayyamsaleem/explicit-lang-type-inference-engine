@@ -8,6 +8,23 @@ type 'a error = OK of 'a | Error of string
 
 type typing_judgement = subst*expr*texpr
 
+(* generate the set of pairs {(s1, s2)} where G_i(x) = s1 /\ G_j(x) = s2, i != j *)
+let gen_substs sl =
+  let filter = function
+    | a::b::[] ->
+        let db = domain b in
+        List.fold_left (fun acc x -> if List.mem x db
+                                     then (Hashtbl.find a x, Hashtbl.find b x) :: acc
+                                     else acc) [] (domain a)
+    | _ -> []
+  in let rec all_combinations ls n =
+       if n <= 0 then [[]] else
+       match ls with
+       | [] -> []
+       | x::xs -> let y = List.map (fun e -> x::e) (all_combinations xs (n-1)) in
+                  let rest = all_combinations xs n in y @ rest in
+  List.fold_left (fun acc x -> filter x :: acc) [] (all_combinations sl 2)
+
 let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
   let rec get_type expression num type_environment =
       match expression with
@@ -71,23 +88,34 @@ let rec infer' (e:expr) (n:int): (int*typing_judgement) error =
                   remove s1 id; remove s2 id; OK(num, (join [s1;s2], Let(id, e, body), ty_body))
                 | err -> err)
              | err -> err)
-      | App(f, arg) ->
+      (* | App(f, arg) ->
             (match get_type f num type_environment with
-             |OK(num, (s, f, ty_f)) ->
-               let type_environment = join [s; type_environment] in
+             |OK(num, (s1, f, ty_f)) ->
+               let type_environment = join [s1; type_environment] in
                (match get_type arg num type_environment with
-                | OK(num, (s, arg, ty_arg)) ->
-                      let type_environment = join [s;type_environment] in
+                | OK(num, (s2, arg, ty_arg)) ->
+                      let type_environment = join [s2;type_environment] in
                       let out_ty = (match ty_f with
                                     | FuncType (_, out_ty) -> out_ty
                                     | _ -> VarType((string_of_int (num+1))))
-                      in (match (mgu [(ty_f, FuncType(ty_arg, out_ty))]) with
+                      in (match (mgu ([(ty_f, FuncType(ty_arg, out_ty))] @ (List.flatten (gen_substs [s1;s2])))) with
                           | UOk(s) -> apply_to_env s type_environment;
                                      OK((num+1), (type_environment, App(f, arg), apply_to_texpr s out_ty))
                           | UError(ty1, ty2) ->
                               Error((string_of_texpr ty1)^" not unifiable with " ^ (string_of_texpr ty2)))
                 | err -> err)
-             | err -> err)
+             | err -> err) *)
+      | App(f, arg) -> 
+            (match get_type f num type_environment with
+              |OK(num, (s1, f, ty_f)) ->
+                  (match get_type arg num type_environment with 
+                   | OK(num, (s2, arg, ty_arg)) ->
+                        (match mgu ([(ty_f, FuncType(ty_arg, (VarType(string_of_int num))))] @ (List.flatten (gen_substs [s1;s2]))) with 
+                        | UOk(s) -> apply_to_env s s1; apply_to_env s s2; OK(num, (join [s1;s2],apply_to_expr s (App(f,arg)), apply_to_texpr s (VarType(string_of_int num))))  
+                        | UError(ty1, ty2) ->Error((string_of_texpr ty1)^" not unifiable with " ^ (string_of_texpr ty2))) 
+                   | err -> err
+                  )
+              | err -> err)
       | ITE(condition, then_case, else_case) ->
             (match get_type condition num type_environment with
              | OK(num, (s_cond, condition, ty_cond)) ->
